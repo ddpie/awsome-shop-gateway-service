@@ -99,8 +99,10 @@ public class AuthenticationGatewayFilter implements GlobalFilter, Ordered {
                     strippedExchange.getAttributes().put(RouteConstants.ATTR_USER_ROLE, role);
 
                     // BR-GW-013: Inject user info headers
+                    // X-Operator-Id for auth/product, X-User-Id for points (plan compatibility)
                     ServerHttpRequest mutatedRequest = strippedExchange.getRequest().mutate()
                             .header(RouteConstants.HEADER_OPERATOR_ID, operatorIdStr)
+                            .header("X-User-Id", operatorIdStr)
                             .header(RouteConstants.HEADER_USER_ROLE, role)
                             .build();
 
@@ -120,6 +122,7 @@ public class AuthenticationGatewayFilter implements GlobalFilter, Ordered {
         return request.mutate()
                 .headers(headers -> {
                     headers.remove(RouteConstants.HEADER_OPERATOR_ID);
+                    headers.remove("X-User-Id");
                     headers.remove(RouteConstants.HEADER_USER_ROLE);
                 })
                 .build();

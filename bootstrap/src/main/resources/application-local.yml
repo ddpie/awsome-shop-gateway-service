@@ -141,6 +141,13 @@ spring:
               metadata:
                 auth-required: false
 
+            - id: point-internal
+              uri: ${gateway.services.point}
+              predicates:
+                - Path=/api/v1/internal/point/**
+              metadata:
+                auth-required: false
+
             # ==================== Protected Routes (auth required) ====================
             - id: auth-protected
               uri: ${gateway.services.auth}
