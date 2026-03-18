@@ -5,59 +5,35 @@ fileMatchPattern: "interface/**"
 
 # Interface 层编码规则
 
-接口层是系统的入口，负责接收外部请求并委托给应用层处理。
+网关服务不使用传统的 REST Controller。路由规则在 YAML 配置文件中定义，由 Spring Cloud Gateway 自动处理。
 
-## 子模块
+## 网关的特殊情况
+- **没有 `@RestController`**：网关不暴露自己的 API，只转发请求到后端服务
+- **路由定义在 YAML 中**：`bootstrap/src/main/resources/application-{profile}.yml` 的 `spring.cloud.gateway.server.webflux.routes`
+- **过滤器在 infrastructure 层**：`AuthGatewayFilter` 位于 `infrastructure/gateway/gateway-impl/`
+- **全局异常处理在 infrastructure 层**：`GlobalExceptionHandler` 实现 `ErrorWebExceptionHandler`
 
-### interface-http（HTTP 控制器）
-- 使用 `@RestController` + `@RequestMapping` + `@RequiredArgsConstructor`
-- 命名：`{Name}Controller`
-- 包路径：`facade.http.controller`
+## interface-http / interface-consumer
+- 这两个子模块在网关中为空壳
+- 不需要在此创建 Controller 或 Consumer
 
-#### URL 设计规范
-- 格式：`/api/v1/{scope}/{module}/{action}`，版本号之后必须是三段
-  - **第一段 `{scope}`**：访问范围
-    - `public` — 经过 API Gateway 对前端提供的接口
-    - `private` — 微服务之间内部调用的接口
-  - **第二段 `{module}`**：业务模块名（如 `gateway`、`category`、`brand`）
-  - **第三段 `{action}`**：具体操作
-- 示例：
-  - `POST /api/v1/public/gateway/get` — 前端查询单个商品
-  - `POST /api/v1/public/gateway/list` — 前端分页查询商品
-  - `POST /api/v1/public/gateway/create` — 前端创建商品
-  - `POST /api/v1/private/gateway/get` — 其他微服务内部查询商品
-- 常用 action：
-  - `/get` — 查询单条
-  - `/list` — 分页查询
-  - `/create` — 创建
-  - `/update` — 更新
-  - `/delete` — 删除
-- 所有端点均使用 `@PostMapping`（包括查询操作）
-- Controller 类上 `@RequestMapping("/api/v1")`，方法上 `@PostMapping("/{scope}/{module}/{action}")`
-- 请求体使用 `@RequestBody @Valid` 接收并校验
-- 返回值统一使用 `Result<T>` 包装（`com.awsome.shop.gateway.common.result.Result`）
-- Swagger 注解：类上 `@Tag(name = "...", description = "...")`，方法上 `@Operation(summary = "...")`
-
-#### 统一响应格式
-```json
-{ "code": 0, "message": "操作成功", "data": {} }
+## 路由配置格式
+```yaml
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: route-name
+              uri: http://service-host:port
+              predicates:
+                - Path=/api/v1/scope/module/**
+              metadata:
+                auth-required: true/false
 ```
-- `code = 0` 表示成功，非 0 为错误码
-- 使用 `Result.success()` / `Result.success(data)` / `Result.error(code, message)` 静态方法
-
-#### 全局异常处理
-- `GlobalExceptionHandler`（`@RestControllerAdvice`）统一捕获异常
-- `BusinessException` → 根据错误码前缀自动映射 HTTP 状态码
-- `ParameterException` → 400
-- `MethodArgumentNotValidException` → 400（含字段级错误详情）
-- `SystemException` / `Exception` → 500（不暴露内部细节）
-
-### interface-consumer（消息消费者）
-- 处理 SQS 消息，委托给应用层服务
 
 ## 禁止事项
-- Controller 只调用 Application Service 接口，不直接调用 Domain Service 或 Repository
-- interface 层不直接依赖 common，通过 application-api 传递获得
-- 不在 Controller 中编写业务逻辑
-- 不在 Controller 中进行数据转换（转换由 Application 层负责）
-- 不直接返回领域实体，必须通过 DTO
+- 不要在 interface 层创建 MVC Controller（网关是 WebFlux）
+- 不要在 interface 层定义路由（路由在 YAML 配置中）
+- 不要在 interface 层处理认证逻辑（认证在 gateway-impl 的过滤器中）

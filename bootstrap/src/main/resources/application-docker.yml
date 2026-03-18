@@ -37,6 +37,34 @@ spring:
               metadata:
                 auth-required: false
 
+            - id: category-public
+              uri: ${gateway.services.product}
+              predicates:
+                - Path=/api/v1/public/category/**
+              metadata:
+                auth-required: false
+
+            - id: file-public
+              uri: ${gateway.services.product}
+              predicates:
+                - Path=/api/v1/public/file/**
+              metadata:
+                auth-required: false
+
+            - id: admin-category
+              uri: ${gateway.services.product}
+              predicates:
+                - Path=/api/v1/admin/category/**
+              metadata:
+                auth-required: true
+
+            - id: admin-product
+              uri: ${gateway.services.product}
+              predicates:
+                - Path=/api/v1/admin/product/**
+              metadata:
+                auth-required: true
+
             - id: point-public
               uri: ${gateway.services.point}
               predicates:
@@ -66,6 +94,13 @@ spring:
                 - Path=/api/v1/admin/user/**
               metadata:
                 auth-required: true
+
+            - id: product-internal
+              uri: ${gateway.services.product}
+              predicates:
+                - Path=/api/v1/internal/product/**
+              metadata:
+                auth-required: false
 
             # Protected Routes (auth required)
             - id: auth-protected

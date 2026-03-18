@@ -5,37 +5,19 @@ fileMatchPattern: "domain/**"
 
 # Domain 层编码规则
 
-领域层是业务核心，包含领域模型、领域服务接口/实现、以及各类 Port 接口。
+网关服务作为无状态路由层，领域层几乎不使用。大部分 domain 子模块为空壳。
 
-## 子模块职责
+## 网关的特殊情况
+- Gateway 的核心逻辑（认证验证、路由过滤）位于 `infrastructure/gateway/gateway-impl/`，而非 domain 层
+- domain-model、domain-api、domain-impl 中通常没有业务实体或服务
+- repository-api、cache-api、mq-api、security-api 端口接口在网关中不使用
 
-### domain-model
-- 纯 Java POJO，不依赖 Spring 或任何框架注解
-- 实体命名：`{Name}Entity`，使用 `@Data`
-- 业务行为方法直接定义在实体上（充血模型），如 `updateInfo()`
-- 包路径：`domain.model.{aggregate}`
-
-### domain-api
-- 领域服务接口，定义业务操作契约
-- 命名：`{Name}DomainService`
-- 包路径：`domain.service.{aggregate}`
-- 方法参数使用基本类型或领域实体，不使用 DTO
-
-### domain-impl
-- 领域服务实现，使用 `@Service` + `@RequiredArgsConstructor`
-- 命名：`{Name}DomainServiceImpl`
-- 包路径：`domain.impl.service.{aggregate}`
-- 只依赖 Port 接口（repository-api、cache-api、mq-api、security-api），绝不直接依赖基础设施实现
-- 业务校验失败时抛出 `BusinessException(ErrorCode)`
-
-### Port 接口（repository-api / cache-api / mq-api / security-api）
-- 定义基础设施访问契约，由 infrastructure 层实现
-- Repository 接口返回领域实体（`{Name}Entity`），不暴露持久化细节
-- 命名：`{Name}Repository`、`{Name}Cache`、`{Name}MessageProducer` 等
-- 包路径：`repository.{aggregate}`、`cache.{aggregate}` 等
+## 如需扩展
+如果未来网关需要领域逻辑（如速率限制规则、黑名单管理），仍应遵循：
+- 实体命名：`{Name}Entity`，纯 Java POJO
+- 服务命名：`{Name}DomainService` / `{Name}DomainServiceImpl`
+- 通过 Port 接口访问基础设施
 
 ## 禁止事项
-- domain-model 中不允许出现 Spring 注解
-- domain-api/domain-impl 不允许直接依赖 infrastructure 实现类
-- 不允许在领域层处理 HTTP 请求/响应相关逻辑
-- 不允许在领域层引用 DTO 或 Request 对象
+- 不要在 domain 层直接依赖 WebFlux 或 Spring Cloud Gateway 的类
+- 不要在 domain 层处理 HTTP 请求/响应

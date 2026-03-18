@@ -52,13 +52,16 @@ public class AuthenticationGatewayFilter implements GlobalFilter, Ordered {
         ServerHttpRequest strippedRequest = stripSecurityHeaders(exchange.getRequest());
         ServerWebExchange strippedExchange = exchange.mutate().request(strippedRequest).build();
 
-        // Skip auth for public and docs paths
-        if (isPublicPath(path)) {
+        // Route metadata auth-required takes precedence over path-based rules
+        boolean routeAuthRequired = isAuthRequired(exchange);
+
+        // Skip auth for public and docs paths, unless route explicitly requires auth
+        if (!routeAuthRequired && isPublicPath(path)) {
             return chain.filter(strippedExchange);
         }
 
-        // Check route metadata for auth-required flag
-        if (!isAuthRequired(exchange)) {
+        // Skip auth if route metadata says not required
+        if (!routeAuthRequired) {
             return chain.filter(strippedExchange);
         }
 
