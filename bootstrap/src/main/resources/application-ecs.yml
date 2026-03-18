@@ -7,12 +7,12 @@ server:
 # Gateway backend service URLs (Copilot Service Connect DNS)
 gateway:
   services:
-    auth: http://auth:8001
-    product: http://product:8002
-    point: http://points:8003
-    order: http://order:8004
+    auth: http://auth.dev.awsome-shop.local:8001
+    product: http://product.dev.awsome-shop.local:8002
+    point: http://points.dev.awsome-shop.local:8003
+    order: http://order.dev.awsome-shop.local:8004
   auth:
-    validate-url: http://auth:8001/api/v1/internal/auth/validate
+    validate-url: http://auth.dev.awsome-shop.local:8001/api/v1/internal/auth/validate
     timeout: 5s
 
 # Spring Cloud Gateway Routes
