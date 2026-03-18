@@ -77,7 +77,7 @@ spring:
               predicates:
                 - Path=/api/v1/public/order/**
               metadata:
-                auth-required: false
+                auth-required: true
 
             # Private Routes (auth required)
             - id: auth-private
