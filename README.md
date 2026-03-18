@@ -1,178 +1,119 @@
-# Awsome Shop Gateway Service
+# Awsome Shop API Gateway
 
-基于领域驱动设计（DDD）+ 六边形架构的商品服务。
+API 网关 — AWSomeShop 平台的统一流量入口，负责认证鉴权与路由转发。
 
-- **Java 21** / **Spring Boot 3.4.1** / **MyBatis-Plus 3.5.7**
-- 多模块 Maven 项目，26 个子模块
-- Flyway 数据库迁移 / Redis 缓存 / SQS 消息队列 / JWT 安全
+- **Java 21** / **Spring Boot 3.4.1** / **Spring Cloud Gateway (WebFlux)**
+- 基于 Netty 的响应式非阻塞架构
+- 远程 Token 验证（调用 auth-service）
+- 无数据库依赖，纯无状态代理
+
+---
+
+## 核心功能
+
+| 功能 | 说明 |
+|------|------|
+| 路由转发 | 按路径前缀分发到 auth/product/points/order 四个服务 |
+| 远程认证 | 调用 auth-service 验证 Bearer Token |
+| 角色鉴权 | `/api/v1/admin/**` 路径要求 ADMIN 角色 |
+| 安全头清除 | 转发前清除 X-Operator-Id / X-User-Role 防伪造 |
+| 用户信息注入 | 认证后注入 X-Operator-Id / X-User-Role 头 + operatorId 到请求体 |
+| 错误处理 | 502 (服务不可达) / 504 (超时) / 401 (认证失败) / 403 (权限不足) |
+
+---
+
+## 过滤器链
+
+```
+Request → AccessLogFilter (HIGHEST_PRECEDENCE)
+        → AuthenticationGatewayFilter (order=100)
+            ├── 清除伪造安全头
+            ├── 公开路径 → 放行
+            ├── 提取 Bearer Token
+            ├── 远程验证 (auth-service)
+            ├── ADMIN 路径角色检查
+            └── 注入 X-Operator-Id, X-User-Role
+        → OperatorIdInjectionFilter (order=200)
+            └── 注入 operatorId 到 JSON Body
+        → Route → Downstream Service
+```
+
+---
+
+## 路由配置
+
+| 路径 | 目标 | 认证 |
+|------|------|------|
+| `/api/v1/public/auth/**` | auth:8001 | 无 |
+| `/api/v1/public/product/**` | product:8002 | 无 |
+| `/api/v1/private/user/**` | auth:8001 | Token |
+| `/api/v1/admin/user/**` | auth:8001 | Token + ADMIN |
+| `/api/v1/product/**` | product:8002 | Token |
+| `/api/v1/point/**` | point:8003 | Token |
+| `/api/v1/order/**` | order:8004 | Token |
 
 ---
 
 ## 模块结构
 
 ```
-shop-gateway-service/
-├── common/                          # 公共基础（异常、错误码、Result）
+awsome-shop-gateway-service/
+├── common/                          # 异常、错误码、常量
+│   ├── enums/GatewayErrorCode       # AUTHZ_001, FORBIDDEN_001, BAD_GATEWAY_001, GATEWAY_TIMEOUT_001
+│   ├── constants/RouteConstants     # 路径常量、Header 名
+│   └── exception/                   # GatewayException, ForbiddenException, ServiceUnavailableException
 ├── domain/
-│   ├── domain-model/                # 领域实体
-│   ├── domain-api/                  # 领域服务接口
-│   ├── domain-impl/                 # 领域服务实现
-│   ├── repository-api/              # 仓储接口（Port）
-│   ├── cache-api/                   # 缓存接口（Port）
-│   ├── mq-api/                      # 消息队列接口（Port）
-│   └── security-api/                # 安全接口（Port）
+│   └── domain-model/                # AuthenticationResult (认证结果领域模型)
 ├── infrastructure/
-│   ├── repository/mysql-impl/       # 仓储实现（Adapter）
-│   ├── cache/redis-impl/            # 缓存实现（Adapter）
-│   ├── mq/sqs-impl/                 # 消息队列实现（Adapter）
-│   └── security/jwt-impl/           # 安全实现（Adapter）
+│   └── gateway/gateway-impl/
+│       ├── filter/                   # AuthenticationGatewayFilter, OperatorIdInjectionFilter
+│       ├── client/AuthServiceClient  # WebClient 调用 auth-service
+│       └── config/                   # GlobalExceptionHandler
 ├── application/
-│   ├── application-api/             # 应用服务接口 + DTO
-│   └── application-impl/            # 应用服务实现
+│   └── application-api/             # AuthValidateResponse DTO
 ├── interface/
-│   ├── interface-http/              # HTTP 控制器
-│   └── interface-consumer/          # 消息消费者
-└── bootstrap/                       # Spring Boot 启动 + 配置
+│   └── interface-http/              # GatewayInjectableRequest, PageableRequest
+└── bootstrap/                       # 启动 + 路由配置 (application-local.yml)
 ```
-
----
-
-## 模块依赖关系图
-
-![DDD Architecture Maven Module Dependency](docs/DDD%20Architecture%20Maven%20Module%20Dependency.svg)
-
-### 一、调用依赖（接口调用方向）
-
-> 表示运行时的方法调用关系，箭头方向为"调用 → 被调用"。
-
-```mermaid
-graph TD
-    HTTP[interface-http]
-    Consumer[interface-consumer]
-    AppImpl[application-impl]
-    DomainImpl[domain-impl]
-    AppAPI[application-api]
-    DomainAPI[domain-api]
-    SecurityAPI[security-api]
-    RepoAPI[repository-api]
-    CacheAPI[cache-api]
-    MqAPI[mq-api]
-
-    HTTP -->|调用| AppAPI
-    Consumer -->|调用| AppAPI
-    AppImpl -->|调用| DomainAPI
-    DomainImpl -->|调用| RepoAPI
-    DomainImpl -->|调用| CacheAPI
-    DomainImpl -->|调用| MqAPI
-    DomainImpl -->|调用| SecurityAPI
-```
-
-### 二、实现依赖（接口实现关系）
-
-> 表示接口 ↔ 实现的关系，箭头方向为"实现类 → 接口"。
-
-```mermaid
-graph LR
-    subgraph 接口
-        AppAPI[application-api]
-        DomainAPI[domain-api]
-        RepoAPI[repository-api]
-        CacheAPI[cache-api]
-        MqAPI[mq-api]
-        SecurityAPI[security-api]
-    end
-
-    subgraph 实现
-        AppImpl[application-impl]
-        DomainImpl[domain-impl]
-        MySQL[mysql-impl]
-        Redis[redis-impl]
-        SQS[sqs-impl]
-        JWT[jwt-impl]
-    end
-
-    AppImpl -.->|implements| AppAPI
-    DomainImpl -.->|implements| DomainAPI
-    MySQL -.->|implements| RepoAPI
-    Redis -.->|implements| CacheAPI
-    SQS -.->|implements| MqAPI
-    JWT -.->|implements| SecurityAPI
-```
-
-### 三、打包依赖（Maven 模块聚合）
-
-> bootstrap 模块负责最终打包，汇聚所有模块为一个可运行的 Spring Boot JAR。
-
-```mermaid
-graph TD
-    Bootstrap[bootstrap<br/>Spring Boot JAR]
-
-    subgraph 接口层
-        HTTP[interface-http]
-        Consumer[interface-consumer]
-    end
-
-    subgraph 应用层
-        AppImpl[application-impl]
-    end
-
-    subgraph 领域层
-        DomainImpl[domain-impl]
-    end
-
-    subgraph 基础设施层
-        MySQL[mysql-impl]
-        Redis[redis-impl]
-        SQS[sqs-impl]
-        JWT[jwt-impl]
-    end
-
-    Bootstrap -->|打包| HTTP
-    Bootstrap -->|打包| Consumer
-    Bootstrap -->|打包| AppImpl
-    Bootstrap -->|打包| DomainImpl
-    Bootstrap -->|打包| MySQL
-    Bootstrap -->|打包| Redis
-    Bootstrap -->|打包| SQS
-    Bootstrap -->|打包| JWT
-
-    style Bootstrap fill:#f9f,stroke:#333,stroke-width:2px
-```
-
----
-
-## DDD 分层原则
-
-| 原则 | 说明 |
-|------|------|
-| **Interface → Application** | 控制器只调用 Application Service 接口 |
-| **Application → Domain** | 应用服务只调用 Domain Service 接口，**不直接依赖 Repository** |
-| **Domain → Port** | 领域服务通过 Port 接口（repository-api 等）访问基础设施 |
-| **Infrastructure → Port** | 基础设施模块实现 Port 接口，依赖反转 |
-| **Bootstrap 组装** | 启动模块汇聚所有实现，由 Spring 完成依赖注入 |
 
 ---
 
 ## 快速开始
 
 ```bash
-# 1. 启动 MySQL
-docker run -d --name mysql-8.4.8 -p 3307:3306 \
-  -e MYSQL_ROOT_PASSWORD=root mysql:8.4.8
+# 1. 确保 auth-service 已启动在 8001 端口
 
-# 2. 创建数据库
-docker exec mysql-8.4.8 mysql -uroot -proot \
-  -e "CREATE DATABASE awsome_shop_gateway DEFAULT CHARACTER SET utf8mb4;"
-
-# 3. 编译 & 安装
+# 2. 编译
 mvn clean install -DskipTests
 
-# 4. 启动应用
-mvn spring-boot:run -pl bootstrap
+# 3. 启动
+mvn spring-boot:run -pl bootstrap -Dspring-boot.run.profiles=local
 
-# 5. 访问 Swagger
-open http://localhost:8081/swagger-ui.html
+# 4. 访问聚合 Swagger
+open http://localhost:8080/swagger-ui.html
+
+# 5. 测试公开接口
+curl -X POST http://localhost:8080/api/v1/public/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
 ```
+
+---
+
+## 架构文档
+
+详见 [docs/architecture.md](docs/architecture.md)
+
+---
+
+## 错误码
+
+| 错误码 | HTTP | 场景 |
+|--------|------|------|
+| AUTHZ_001 | 401 | Token 缺失/无效/过期 |
+| FORBIDDEN_001 | 403 | 非 ADMIN 访问管理员端点 |
+| BAD_GATEWAY_001 | 502 | 下游服务不可达 |
+| GATEWAY_TIMEOUT_001 | 504 | 下游服务超时 |
 
 ---
 
@@ -182,9 +123,7 @@ open http://localhost:8081/swagger-ui.html
 |------|------|------|
 | Java | 21 | 运行时 |
 | Spring Boot | 3.4.1 | 应用框架 |
-| MyBatis-Plus | 3.5.7 | ORM |
-| Flyway | - | 数据库迁移 |
-| SpringDoc | 2.7.0 | API 文档 |
-| Redis | - | 缓存 |
-| AWS SQS | - | 消息队列 |
+| Spring Cloud Gateway | - | 响应式网关 (WebFlux/Netty) |
+| WebClient | - | 非阻塞 HTTP 客户端 (调用 auth-service) |
+| SpringDoc | 2.7.0 | 聚合 Swagger 文档 |
 | Lombok | - | 代码简化 |

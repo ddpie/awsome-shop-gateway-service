@@ -1,67 +1,102 @@
 # Docker Environment Configuration
-# 容器化部署环境配置
+# 容器化部署环境配置 — Gateway 是无数据库的无状态服务
 
 server:
-  port: 8081
+  port: 8080
 
+# Gateway backend service URLs (Docker DNS)
+gateway:
+  services:
+    auth: http://auth-service:8001
+    product: http://product-service:8002
+    point: http://points-service:8003
+    order: http://order-service:8004
+  auth:
+    validate-url: http://auth-service:8001/api/v1/internal/auth/validate
+    timeout: 5s
+
+# Spring Cloud Gateway Routes
 spring:
-  # Redis 配置
-  data:
-    redis:
-      host: ${REDIS_HOST:redis}
-      port: ${REDIS_PORT:6379}
-      database: 0
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            # Public Routes (no auth)
+            - id: auth-public
+              uri: ${gateway.services.auth}
+              predicates:
+                - Path=/api/v1/public/auth/**
+              metadata:
+                auth-required: false
 
-  # 数据源配置
-  datasource:
-    url: jdbc:mysql://${DB_HOST:mysql}:${DB_PORT:3306}/${DB_NAME:awsome_shop_gateway}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    type: com.alibaba.druid.pool.DruidDataSource
+            - id: product-public
+              uri: ${gateway.services.product}
+              predicates:
+                - Path=/api/v1/public/product/**
+              metadata:
+                auth-required: false
 
-    # Druid 连接池配置 (生产环境调优)
-    druid:
-      initial-size: 10
-      min-idle: 5
-      max-active: 50
-      max-wait: 60000
-      test-while-idle: true
-      test-on-borrow: false
-      test-on-return: false
-      validation-query: SELECT 1
-      time-between-eviction-runs-millis: 60000
-      min-evictable-idle-time-millis: 300000
+            - id: point-public
+              uri: ${gateway.services.point}
+              predicates:
+                - Path=/api/v1/public/point/**
+              metadata:
+                auth-required: false
 
-      # 禁用 Druid 监控 (生产环境)
-      stat-view-servlet:
-        enabled: false
+            - id: order-public
+              uri: ${gateway.services.order}
+              predicates:
+                - Path=/api/v1/public/order/**
+              metadata:
+                auth-required: false
 
-# MyBatis-Plus 配置
-mybatis-plus:
-  configuration:
-    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
-  global-config:
-    db-config:
-      banner: false
+            # Private Routes (auth required)
+            - id: auth-private
+              uri: ${gateway.services.auth}
+              predicates:
+                - Path=/api/v1/private/user/**
+              metadata:
+                auth-required: true
 
-# Security 配置
-security:
-  jwt:
-    secret: ${JWT_SECRET:docker-secret-key-for-jwt-token-must-be-at-least-256-bits-long-for-hmac-sha256}
-    expiration: ${JWT_EXPIRATION:7200}
-    issuer: awsome-shop-gateway-service
-  login:
-    max-failed-attempts: 5
-    lock-duration: 1800
+            # Admin Routes (auth + ADMIN role required)
+            - id: auth-admin
+              uri: ${gateway.services.auth}
+              predicates:
+                - Path=/api/v1/admin/user/**
+              metadata:
+                auth-required: true
 
-# Shop 配置
-shop:
-  security:
-    encryption:
-      key: ${ENCRYPTION_KEY:dockerEncryptionKey1234567890ab}
+            # Protected Routes (auth required)
+            - id: auth-protected
+              uri: ${gateway.services.auth}
+              predicates:
+                - Path=/api/v1/auth/**
+              metadata:
+                auth-required: true
 
-# 日志配置
+            - id: product-protected
+              uri: ${gateway.services.product}
+              predicates:
+                - Path=/api/v1/product/**
+              metadata:
+                auth-required: true
+
+            - id: point-protected
+              uri: ${gateway.services.point}
+              predicates:
+                - Path=/api/v1/point/**
+              metadata:
+                auth-required: true
+
+            - id: order-protected
+              uri: ${gateway.services.order}
+              predicates:
+                - Path=/api/v1/order/**
+              metadata:
+                auth-required: true
+
+# Logging
 logging:
   level:
     root: INFO

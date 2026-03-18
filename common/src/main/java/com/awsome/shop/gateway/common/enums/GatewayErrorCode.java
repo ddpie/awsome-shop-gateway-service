@@ -4,21 +4,16 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * Gateway-specific error codes
+ * Gateway-specific error codes (aligned with design doc)
  */
 @Getter
 @AllArgsConstructor
 public enum GatewayErrorCode implements ErrorCode {
 
-    AUTH_TOKEN_MISSING("AUTH_001", "Authorization token is missing"),
-    AUTH_TOKEN_INVALID("AUTH_002", "Authorization token is invalid"),
-    AUTH_TOKEN_EXPIRED("AUTH_003", "Authorization token has expired"),
-    AUTH_SERVICE_UNAVAILABLE("AUTH_004", "Authentication service is unavailable"),
-
-    GATEWAY_SERVICE_UNAVAILABLE("SYS_001", "Backend service is unavailable"),
-    GATEWAY_TIMEOUT("SYS_002", "Backend service timeout"),
-    GATEWAY_INTERNAL_ERROR("SYS_003", "Gateway internal error"),
-    GATEWAY_BAD_GATEWAY("SYS_004", "Bad gateway response from backend");
+    AUTHZ_001("AUTHZ_001", "未授权，请先登录"),
+    FORBIDDEN_001("FORBIDDEN_001", "权限不足"),
+    BAD_GATEWAY_001("BAD_GATEWAY_001", "服务暂时不可用"),
+    GATEWAY_TIMEOUT_001("GATEWAY_TIMEOUT_001", "请求超时");
 
     private final String code;
     private final String message;

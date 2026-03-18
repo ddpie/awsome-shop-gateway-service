@@ -90,6 +90,22 @@ spring:
               metadata:
                 auth-required: false
 
+            # ==================== Private Routes (auth required) ====================
+            - id: auth-private
+              uri: ${gateway.services.auth}
+              predicates:
+                - Path=/api/v1/private/user/**
+              metadata:
+                auth-required: true
+
+            # ==================== Admin Routes (auth + ADMIN role required) ====================
+            - id: auth-admin
+              uri: ${gateway.services.auth}
+              predicates:
+                - Path=/api/v1/admin/user/**
+              metadata:
+                auth-required: true
+
             # ==================== Protected Routes (auth required) ====================
             - id: auth-protected
               uri: ${gateway.services.auth}

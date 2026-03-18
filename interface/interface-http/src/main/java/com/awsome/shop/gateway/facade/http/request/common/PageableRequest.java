@@ -11,22 +11,11 @@ import jakarta.validation.constraints.Min;
  *
  * <p>网关注入支持：</p>
  * <ul>
- *   <li>tenantId - 租户ID</li>
- *   <li>traceId - 追踪ID</li>
- *   <li>userId - 用户ID</li>
+ *   <li>operatorId - 操作人ID（网关从 JWT 验证结果中提取并注入）</li>
  * </ul>
- *
- * <p>需求追溯：</p>
- * <ul>
- *   <li>Feature 024: POST-Only API 重构</li>
- *   <li>FR-009: 网关注入参数支持</li>
- * </ul>
- *
- * @author AI Assistant
- * @since 2025-12-22
  */
 @Schema(description = "分页请求基类")
-public abstract class PageableRequest {
+public abstract class PageableRequest implements GatewayInjectableRequest {
 
     @Schema(description = "页码（从 1 开始）", example = "1", minimum = "1")
     @Min(value = 1, message = "页码最小为 1")
@@ -37,16 +26,10 @@ public abstract class PageableRequest {
     @Max(value = 100, message = "每页大小最大为 100")
     private Integer size = 20;
 
-    // ==================== 网关注入字段（可选） ====================
+    // ==================== 网关注入字段 ====================
 
-    @Schema(description = "租户ID（网关注入）", hidden = true)
-    private Long tenantId;
-
-    @Schema(description = "追踪ID（网关注入）", hidden = true)
-    private String traceId;
-
-    @Schema(description = "用户ID（网关注入）", hidden = true)
-    private String userId;
+    @Schema(description = "操作人ID（网关注入）", hidden = true)
+    private String operatorId;
 
     // ==================== Getters and Setters ====================
 
@@ -66,27 +49,13 @@ public abstract class PageableRequest {
         this.size = size;
     }
 
-    public Long getTenantId() {
-        return tenantId;
+    @Override
+    public String getOperatorId() {
+        return operatorId;
     }
 
-    public void setTenantId(Long tenantId) {
-        this.tenantId = tenantId;
-    }
-
-    public String getTraceId() {
-        return traceId;
-    }
-
-    public void setTraceId(String traceId) {
-        this.traceId = traceId;
-    }
-
-    public String getUserId() {
-        return userId;
-    }
-
-    public void setUserId(String userId) {
-        this.userId = userId;
+    @Override
+    public void setOperatorId(String operatorId) {
+        this.operatorId = operatorId;
     }
 }

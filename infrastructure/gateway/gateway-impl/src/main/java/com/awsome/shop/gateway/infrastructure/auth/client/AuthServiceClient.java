@@ -3,7 +3,8 @@ package com.awsome.shop.gateway.infrastructure.auth.client;
 import com.awsome.shop.gateway.application.auth.dto.AuthValidateRequest;
 import com.awsome.shop.gateway.application.auth.dto.AuthValidateResponse;
 import com.awsome.shop.gateway.common.enums.GatewayErrorCode;
-import com.awsome.shop.gateway.common.exception.AuthenticationException;
+import com.awsome.shop.gateway.common.exception.GatewayException;
+import com.awsome.shop.gateway.common.exception.ServiceUnavailableException;
 import com.awsome.shop.gateway.domain.auth.model.AuthenticationResult;
 import com.awsome.shop.gateway.domain.auth.service.AuthenticationService;
 import lombok.extern.slf4j.Slf4j;
@@ -13,9 +14,17 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.concurrent.TimeoutException;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 
 /**
  * Auth service client that validates tokens via external auth service using WebClient.
+ *
+ * <p>Error handling per design doc:</p>
+ * <ul>
+ *   <li>Auth service unreachable → BAD_GATEWAY_001 (502)</li>
+ *   <li>Auth service timeout → GATEWAY_TIMEOUT_001 (504)</li>
+ * </ul>
  */
 @Slf4j
 @Component
@@ -48,18 +57,28 @@ public class AuthServiceClient implements AuthenticationService {
                 .timeout(timeout)
                 .map(response -> {
                     if (response.isSuccess()) {
-                        return AuthenticationResult.success(response.getOperatorId());
+                        return AuthenticationResult.success(
+                                response.getOperatorId(), response.getRole());
                     }
                     return AuthenticationResult.failure(response.getMessage());
                 })
                 .onErrorResume(ex -> {
-                    if (ex instanceof AuthenticationException) {
+                    if (ex instanceof GatewayException) {
                         return Mono.error(ex);
                     }
+                    if (ex instanceof TimeoutException) {
+                        log.error("Auth service call timed out: {}", ex.getMessage());
+                        return Mono.error(new GatewayException(
+                                GatewayErrorCode.GATEWAY_TIMEOUT_001));
+                    }
+                    if (ex instanceof WebClientRequestException) {
+                        log.error("Auth service unreachable: {}", ex.getMessage());
+                        return Mono.error(new ServiceUnavailableException(
+                                GatewayErrorCode.BAD_GATEWAY_001));
+                    }
                     log.error("Auth service call failed: {}", ex.getMessage(), ex);
-                    return Mono.error(new AuthenticationException(
-                            GatewayErrorCode.AUTH_SERVICE_UNAVAILABLE,
-                            "Authentication service unavailable: " + ex.getMessage()));
+                    return Mono.error(new ServiceUnavailableException(
+                            GatewayErrorCode.BAD_GATEWAY_001));
                 });
     }
 }

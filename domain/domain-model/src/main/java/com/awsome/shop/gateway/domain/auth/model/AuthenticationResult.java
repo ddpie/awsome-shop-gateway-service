@@ -16,14 +16,17 @@ public class AuthenticationResult {
 
     private boolean authenticated;
 
-    private String operatorId;
+    private Long operatorId;
+
+    private String role;
 
     private String message;
 
-    public static AuthenticationResult success(String operatorId) {
+    public static AuthenticationResult success(Long operatorId, String role) {
         return AuthenticationResult.builder()
                 .authenticated(true)
                 .operatorId(operatorId)
+                .role(role)
                 .build();
     }
 

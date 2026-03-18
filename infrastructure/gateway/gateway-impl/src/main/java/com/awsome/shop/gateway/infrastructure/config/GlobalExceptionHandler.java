@@ -3,6 +3,7 @@ package com.awsome.shop.gateway.infrastructure.config;
 import com.awsome.shop.gateway.common.constants.RouteConstants;
 import com.awsome.shop.gateway.common.dto.ErrorResponse;
 import com.awsome.shop.gateway.common.exception.AuthenticationException;
+import com.awsome.shop.gateway.common.exception.ForbiddenException;
 import com.awsome.shop.gateway.common.exception.GatewayException;
 import com.awsome.shop.gateway.common.exception.ServiceUnavailableException;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -18,14 +19,22 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import java.net.ConnectException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeoutException;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 
 /**
  * Reactive global exception handler for gateway errors.
  *
  * <p>Ordered at -1 to take priority over Spring Boot's default error handler.</p>
+ *
+ * <p>Error code to HTTP status mapping per design doc:</p>
+ * <ul>
+ *   <li>AUTHZ_001 → 401 Unauthorized</li>
+ *   <li>FORBIDDEN_001 → 403 Forbidden</li>
+ *   <li>BAD_GATEWAY_001 → 502 Bad Gateway</li>
+ *   <li>GATEWAY_TIMEOUT_001 → 504 Gateway Timeout</li>
+ * </ul>
  */
 @Slf4j
 @Order(-1)
@@ -48,8 +57,12 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
             status = HttpStatus.UNAUTHORIZED;
             code = authEx.getErrorCode();
             message = authEx.getErrorMessage();
+        } else if (ex instanceof ForbiddenException forbiddenEx) {
+            status = HttpStatus.FORBIDDEN;
+            code = forbiddenEx.getErrorCode();
+            message = forbiddenEx.getErrorMessage();
         } else if (ex instanceof ServiceUnavailableException svcEx) {
-            status = HttpStatus.SERVICE_UNAVAILABLE;
+            status = resolveStatus(svcEx.getErrorCode());
             code = svcEx.getErrorCode();
             message = svcEx.getErrorMessage();
         } else if (ex instanceof GatewayException gwEx) {
@@ -60,14 +73,14 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
             status = HttpStatus.valueOf(rse.getStatusCode().value());
             code = "GATEWAY_" + status.value();
             message = rse.getReason() != null ? rse.getReason() : status.getReasonPhrase();
-        } else if (ex instanceof ConnectException) {
-            status = HttpStatus.SERVICE_UNAVAILABLE;
-            code = "SYS_001";
-            message = "Backend service is unavailable";
+        } else if (ex instanceof WebClientRequestException) {
+            status = HttpStatus.BAD_GATEWAY;
+            code = "BAD_GATEWAY_001";
+            message = "服务暂时不可用";
         } else if (ex instanceof TimeoutException) {
             status = HttpStatus.GATEWAY_TIMEOUT;
-            code = "SYS_002";
-            message = "Backend service timeout";
+            code = "GATEWAY_TIMEOUT_001";
+            message = "请求超时";
         } else {
             status = HttpStatus.INTERNAL_SERVER_ERROR;
             code = "SYS_003";
@@ -77,7 +90,7 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
 
         if (status.is4xxClientError()) {
             log.warn("[{}] {} {} - {} {}", requestId, status.value(), path, code, message);
-        } else if (status.is5xxServerError() && !(ex instanceof ConnectException || ex instanceof TimeoutException)) {
+        } else if (status.is5xxServerError() && !(ex instanceof WebClientRequestException || ex instanceof TimeoutException)) {
             log.error("[{}] {} {} - {} {}", requestId, status.value(), path, code, message);
         }
 
@@ -101,11 +114,17 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
         if (errorCode == null) {
             return HttpStatus.INTERNAL_SERVER_ERROR;
         }
-        if (errorCode.startsWith("AUTH_")) {
+        if (errorCode.startsWith("AUTHZ_")) {
             return HttpStatus.UNAUTHORIZED;
         }
-        if (errorCode.startsWith("AUTHZ_")) {
+        if (errorCode.startsWith("FORBIDDEN_")) {
             return HttpStatus.FORBIDDEN;
+        }
+        if (errorCode.startsWith("BAD_GATEWAY_")) {
+            return HttpStatus.BAD_GATEWAY;
+        }
+        if (errorCode.startsWith("GATEWAY_TIMEOUT_")) {
+            return HttpStatus.GATEWAY_TIMEOUT;
         }
         if (errorCode.startsWith("PARAM_")) {
             return HttpStatus.BAD_REQUEST;

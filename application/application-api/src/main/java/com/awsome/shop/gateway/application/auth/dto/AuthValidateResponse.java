@@ -7,6 +7,11 @@ import lombok.NoArgsConstructor;
 
 /**
  * Auth validation response DTO from external auth service
+ *
+ * <p>Response format from auth-service /api/v1/internal/auth/validate:</p>
+ * <pre>
+ * { "success": true, "operatorId": 1, "role": "EMPLOYEE", "message": "验证成功" }
+ * </pre>
  */
 @Data
 @Builder
@@ -16,7 +21,9 @@ public class AuthValidateResponse {
 
     private boolean success;
 
-    private String operatorId;
+    private Long operatorId;
+
+    private String role;
 
     private String message;
 }
