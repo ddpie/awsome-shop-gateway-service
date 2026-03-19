@@ -79,6 +79,13 @@ spring:
               metadata:
                 auth-required: true
 
+            - id: order-private
+              uri: ${gateway.services.order}
+              predicates:
+                - Path=/api/v1/private/order/**
+              metadata:
+                auth-required: true
+
             # Private Routes (auth required)
             - id: auth-private
               uri: ${gateway.services.auth}
@@ -99,6 +106,13 @@ spring:
               uri: ${gateway.services.product}
               predicates:
                 - Path=/api/v1/internal/product/**
+              metadata:
+                auth-required: false
+
+            - id: point-internal
+              uri: ${gateway.services.point}
+              predicates:
+                - Path=/api/v1/internal/point/**
               metadata:
                 auth-required: false
 
